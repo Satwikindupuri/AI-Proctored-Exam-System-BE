@@ -1,0 +1,44 @@
+const express = require("express");
+const router = express.Router();
+
+const protect = require("../middleware/auth.middleware");
+const roleCheck = require("../middleware/role.middleware");
+const { getLiveExams, getExamDetails, startExam, submitExam } = require("../controllers/student.controller");
+
+// Test route (student only)
+router.get("/dashboard", protect, roleCheck("student"), (req, res) => {
+  res.json({
+    message: "Welcome Student",
+    user: req.user,
+  });
+});
+
+router.get(
+  "/exams/live",
+  protect,
+  roleCheck("student"),
+  getLiveExams
+);
+
+router.get(
+  "/exams/:examId",
+  protect,
+  roleCheck("student"),
+  getExamDetails
+);
+
+router.post(
+  "/exams/:examId/start",
+  protect,
+  roleCheck("student"),
+  startExam
+);
+
+router.post(
+  "/exams/:examId/submit",
+  protect,
+  roleCheck("student"),
+  submitExam
+);
+
+module.exports = router;
