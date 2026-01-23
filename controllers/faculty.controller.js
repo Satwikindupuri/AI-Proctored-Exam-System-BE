@@ -220,6 +220,52 @@ exports.saveAIQuestions = async (req, res) => {
   }
 };
 
+// @desc    Update exam questions
+// @route   PATCH /api/faculty/exams/:examId/questions
+// @access  Faculty
+exports.updateExamQuestions = async (req, res) => {
+try {
+const { examId } = req.params;
+const { questions } = req.body;
+
+if (!Array.isArray(questions) || questions.length === 0) {
+  return res.status(400).json({ message: "Questions required" });
+}
+
+const exam = await Exam.findById(examId);
+
+if (!exam) {
+  return res.status(404).json({ message: "Exam not found" });
+}
+
+if (exam.createdBy.toString() !== req.user.id) {
+  return res.status(403).json({ message: "Not authorized" });
+}
+
+if (exam.status !== "DRAFT") {
+  return res.status(400).json({
+    message: "Cannot edit questions after publish"
+  });
+}
+
+// Update each question
+for (const q of questions) {
+  await Question.findByIdAndUpdate(q._id, {
+    questionText: q.questionText,
+    options: q.options,
+    correctAnswer: q.correctAnswer,
+    difficulty: q.difficulty || "MEDIUM"
+  });
+}
+
+res.json({ message: "Questions updated successfully" });
+} catch (error) {
+console.error("UPDATE QUESTIONS ERROR:", error);
+res.status(500).json({ message: "Failed to update questions" });
+}
+};
+
+
 // @desc    Publish exam
 // @route   PUT /api/faculty/exams/:examId/publish
 // @access  Faculty

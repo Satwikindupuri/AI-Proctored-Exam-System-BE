@@ -3,7 +3,7 @@ const router = express.Router();
 
 const protect = require("../middleware/auth.middleware");
 const roleCheck = require("../middleware/role.middleware");
-const { createExam, addManualQuestion, generateAIQuestions, saveAIQuestions, publishExam, getFlaggedStudents, getCompletedExams, getLiveExams } = require("../controllers/faculty.controller");
+const { createExam, addManualQuestion, generateAIQuestions, saveAIQuestions, publishExam, getFlaggedStudents, getCompletedExams, getLiveExams, updateExamQuestions } = require("../controllers/faculty.controller");
 const Exam = require("../models/Exam");
 
 // Test route (faculty only)
@@ -86,6 +86,13 @@ router.patch(
     await Exam.findByIdAndUpdate(req.params.examId, { status: "LIVE" });
     res.json({ message: "Exam published" });
   }
+);
+
+router.patch(
+  "/exams/:examId/questions/update",
+  protect,
+  roleCheck("faculty"),
+  updateExamQuestions
 );
 
 
