@@ -3,7 +3,7 @@ const router = express.Router();
 
 const protect = require("../middleware/auth.middleware");
 const roleCheck = require("../middleware/role.middleware");
-const { createExam, addManualQuestion, generateAIQuestions, saveAIQuestions, publishExam, getFlaggedStudents, getCompletedExams, getLiveExams, updateExamQuestions } = require("../controllers/faculty.controller");
+const { createExam, addManualQuestion, generateAIQuestions, saveAIQuestions, publishExam, getFlaggedStudents, getLiveExams, updateExamQuestions, endExam, getCompletedExams, getExamAttempts, downloadExamQuestions, downloadAttemptsCSV,getStudentAnalysis, getStudentsByClass } = require("../controllers/faculty.controller");
 const Exam = require("../models/Exam");
 
 // Test route (faculty only)
@@ -56,7 +56,7 @@ router.put(
 
 // Get flagged students
 router.get(
-  "/flagged-students",
+  "/flagged",
   protect,
   roleCheck("faculty"),
   getFlaggedStudents
@@ -72,12 +72,13 @@ router.get(
 
 // Get live exams
 router.get(
-  "/live-exams",
+  "/exams/live",
   protect,
   roleCheck("faculty"),
   getLiveExams
 );
 
+// Publish exam (alternative route)
 router.patch(
   "/exams/:examId/publish",
   protect,
@@ -88,6 +89,7 @@ router.patch(
   }
 );
 
+// Update exam questions
 router.patch(
   "/exams/:examId/questions/update",
   protect,
@@ -95,5 +97,59 @@ router.patch(
   updateExamQuestions
 );
 
+// End exam
+router.patch(
+  "/exams/:examId/end",
+  protect,
+  roleCheck("faculty"),
+  endExam
+);
+
+// Get completed exams
+router.get(
+  "/exams/completed",
+  protect,
+  roleCheck("faculty"),
+  getCompletedExams
+);
+
+// Get exam attempts
+router.get(
+  "/exams/:examId/attempts",
+  protect,
+  roleCheck("faculty"),
+  getExamAttempts
+);
+
+// Download exam questions
+router.get(
+  "/exams/:examId/questions/download",
+  protect,
+  roleCheck("faculty"),
+  downloadExamQuestions
+);
+
+// Download exam attempts as CSV
+router.get(
+  "/exams/:examId/attempts/download",
+  protect,
+  roleCheck("faculty"),
+  downloadAttemptsCSV
+);
+
+router.get(
+  "/student-analysis",
+  protect,
+  roleCheck("faculty"),
+  getStudentAnalysis
+);
+
+//
+router.get(
+  "/students",
+  protect,
+  roleCheck("faculty"),
+  getStudentsByClass
+);
 
 module.exports = router;

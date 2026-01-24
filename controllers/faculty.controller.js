@@ -1,6 +1,12 @@
 const Question = require("../models/Question");
 const Exam = require("../models/Exam");
 const ExamAttempt = require("../models/ExamAttempt");
+const User = require("../models/User");
+const OpenAI = require("openai");
+
+// const openai = new OpenAI({
+//   apiKey: process.env.OPENAI_API_KEY,
+// });
 
 // @desc    Create new exam (Faculty)
 // @route   POST /api/faculty/exams
@@ -110,58 +116,173 @@ exports.addManualQuestion = async (req, res) => {
 // @route   POST /api/faculty/exams/:examId/questions/ai-generate
 // @access  Faculty
 exports.generateAIQuestions = async (req, res) => {
-try {
-  console.log("AI GEN BODY=", req.body);
+  try {
+    const OpenAI = require("openai");
 
-const { examId } = req.params;
-const { syllabus, numberOfQuestions, difficulty = "MEDIUM" } = req.body;
+    const client = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY
+    });
 
-if (!syllabus || !numberOfQuestions) {
-  return res.status(400).json({ message: "Required fields missing" });
+    const { syllabus, numberOfQuestions, difficulty = "MEDIUM" } = req.body;
+    const { examId } = req.params;
+
+    if (!syllabus || !numberOfQuestions) {
+      return res.status(400).json({ message: "Required fields missing" });
+    }
+
+    const exam = await Exam.findById(examId);
+    if (!exam) {
+      return res.status(404).json({ message: "Exam not found" });
+    }
+
+    if (exam.status !== "DRAFT") {
+      return res.status(400).json({ message: "Cannot generate questions for live exam" });
+    }
+
+    const prompt = `
+You are a university-level exam paper setter.
+
+Generate ${numberOfQuestions} MCQ questions strictly from the syllabus below:
+
+SYLLABUS:
+${syllabus}
+
+Difficulty: ${difficulty}
+
+STRICT RULES (MANDATORY):
+
+Output ONLY valid JSON
+Do NOT include explanations
+Do NOT include markdown
+Do NOT include headings
+Do NOT include any text outside JSON
+Use double quotes only
+Exactly 4 options per question
+correctAnswer must exactly match one option
+JSON FORMAT (ARRAY ONLY):
+[
+{
+"questionText": "string",
+"options": ["A", "B", "C", "D"],
+"correctAnswer": "one of the options"
 }
+]
+`;
 
-const exam = await Exam.findById(examId);
+    const response = await client.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.6
+    });
 
-if (!exam) return res.status(404).json({ message: "Exam not found" });
+    let aiQuestions;
 
-if (exam.createdBy.toString() !== req.user.id) {
-  return res.status(403).json({ message: "Not authorized" });
-}
+    try {
+      const raw = response.choices[0].message.content.trim();
 
-if (exam.status !== "DRAFT") {
-  return res.status(400).json({ message: "Cannot modify published exam" });
-}
+      // Extract JSON array if extra text exists
+      const jsonStart = raw.indexOf("[");
+      const jsonEnd = raw.lastIndexOf("]");
 
-// 🔥 AI LOGIC (mocked for now)
-const generatedQuestions = [];
+      if (jsonStart === -1 || jsonEnd === -1) {
+        throw new Error("AI did not return valid JSON");
+      }
 
-for (let i = 1; i <= numberOfQuestions; i++) {
-  generatedQuestions.push({
-    exam: examId,
-    questionType: "MCQ",
-    questionText: `(${difficulty}) ${syllabus} - AI Question ${i}`,
-    options: ["Option A", "Option B", "Option C", "Option D"],
-    correctAnswer: "Option A",
-    difficulty,
-    source: "AI",
-    createdBy: req.user.id
-  });
-}
+      const jsonString = raw.substring(jsonStart, jsonEnd + 1);
+      aiQuestions = JSON.parse(jsonString);
 
-const savedQuestions = await Question.insertMany(generatedQuestions);
+    } catch (parseError) {
+      console.error("JSON PARSE FAILED:", response.choices[0].message.content);
+      return res.status(500).json({
+        message: "AI returned invalid format. Try regenerating."
+      });
+    }
 
-exam.questions.push(...savedQuestions.map(q => q._id));
-await exam.save();
+    const savedQuestions = [];
 
-res.json({
-  message: "AI questions generated successfully",
-  questions: savedQuestions
-});
-} catch (err) {
-console.error(err);
-res.status(500).json({ message: "AI generation failed" });
-}
+    for (const q of aiQuestions) {
+      const question = await Question.create({
+        exam: examId,
+        questionType: "MCQ",
+        questionText: q.questionText,
+        options: q.options,
+        correctAnswer: q.correctAnswer,
+        difficulty,
+        source: "AI",
+        createdBy: req.user.id
+      });
+
+      exam.questions.push(question._id);
+      savedQuestions.push(question);
+    }
+
+    await exam.save();
+
+    res.json({
+      message: "AI questions generated successfully",
+      questions: savedQuestions
+    });
+  } catch (error) {
+    console.error("AI GENERATION ERROR:", error);
+    res.status(500).json({ message: "AI generation failed" });
+  }
 };
+
+
+//MOCK AI FUNCTIONALITY BELOW
+// exports.generateAIQuestions = async (req, res) => {
+// try {
+//   console.log("AI GEN BODY=", req.body);
+
+// const { examId } = req.params;
+// const { syllabus, numberOfQuestions, difficulty = "MEDIUM" } = req.body;
+
+// if (!syllabus || !numberOfQuestions) {
+//   return res.status(400).json({ message: "Required fields missing" });
+// }
+
+// const exam = await Exam.findById(examId);
+
+// if (!exam) return res.status(404).json({ message: "Exam not found" });
+
+// if (exam.createdBy.toString() !== req.user.id) {
+//   return res.status(403).json({ message: "Not authorized" });
+// }
+
+// if (exam.status !== "DRAFT") {
+//   return res.status(400).json({ message: "Cannot modify published exam" });
+// }
+
+// // 🔥 AI LOGIC (mocked for now)
+// const generatedQuestions = [];
+
+// for (let i = 1; i <= numberOfQuestions; i++) {
+//   generatedQuestions.push({
+//     exam: examId,
+//     questionType: "MCQ",
+//     questionText: `(${difficulty}) ${syllabus} - AI Question ${i}`,
+//     options: ["Option A", "Option B", "Option C", "Option D"],
+//     correctAnswer: "Option A",
+//     difficulty,
+//     source: "AI",
+//     createdBy: req.user.id
+//   });
+// }
+
+// const savedQuestions = await Question.insertMany(generatedQuestions);
+
+// exam.questions.push(...savedQuestions.map(q => q._id));
+// await exam.save();
+
+// res.json({
+//   message: "AI questions generated successfully",
+//   questions: savedQuestions
+// });
+// } catch (err) {
+// console.error(err);
+// res.status(500).json({ message: "AI generation failed" });
+// }
+// };
 
 // @desc    Save approved AI questions
 // @route   POST /api/faculty/exams/:examId/questions/ai-save
@@ -224,45 +345,45 @@ exports.saveAIQuestions = async (req, res) => {
 // @route   PATCH /api/faculty/exams/:examId/questions
 // @access  Faculty
 exports.updateExamQuestions = async (req, res) => {
-try {
-const { examId } = req.params;
-const { questions } = req.body;
+  try {
+    const { examId } = req.params;
+    const { questions } = req.body;
 
-if (!Array.isArray(questions) || questions.length === 0) {
-  return res.status(400).json({ message: "Questions required" });
-}
+    if (!Array.isArray(questions) || questions.length === 0) {
+      return res.status(400).json({ message: "Questions required" });
+    }
 
-const exam = await Exam.findById(examId);
+    const exam = await Exam.findById(examId);
 
-if (!exam) {
-  return res.status(404).json({ message: "Exam not found" });
-}
+    if (!exam) {
+      return res.status(404).json({ message: "Exam not found" });
+    }
 
-if (exam.createdBy.toString() !== req.user.id) {
-  return res.status(403).json({ message: "Not authorized" });
-}
+    if (exam.createdBy.toString() !== req.user.id) {
+      return res.status(403).json({ message: "Not authorized" });
+    }
 
-if (exam.status !== "DRAFT") {
-  return res.status(400).json({
-    message: "Cannot edit questions after publish"
-  });
-}
+    if (exam.status !== "DRAFT") {
+      return res.status(400).json({
+        message: "Cannot edit questions after publish"
+      });
+    }
 
-// Update each question
-for (const q of questions) {
-  await Question.findByIdAndUpdate(q._id, {
-    questionText: q.questionText,
-    options: q.options,
-    correctAnswer: q.correctAnswer,
-    difficulty: q.difficulty || "MEDIUM"
-  });
-}
+    // Update each question
+    for (const q of questions) {
+      await Question.findByIdAndUpdate(q._id, {
+        questionText: q.questionText,
+        options: q.options,
+        correctAnswer: q.correctAnswer,
+        difficulty: q.difficulty || "MEDIUM"
+      });
+    }
 
-res.json({ message: "Questions updated successfully" });
-} catch (error) {
-console.error("UPDATE QUESTIONS ERROR:", error);
-res.status(500).json({ message: "Failed to update questions" });
-}
+    res.json({ message: "Questions updated successfully" });
+  } catch (error) {
+    console.error("UPDATE QUESTIONS ERROR:", error);
+    res.status(500).json({ message: "Failed to update questions" });
+  }
 };
 
 
@@ -306,84 +427,287 @@ exports.publishExam = async (req, res) => {
 exports.getFlaggedStudents = async (req, res) => {
   try {
     const attempts = await ExamAttempt.find({
-      $or: [
-        { status: "AUTO_SUBMITTED" },
-        { "violations.0": { $exists: true } }
-      ]
+      status: "AUTO_SUBMITTED"
     })
       .populate("student", "name rollNo year branch section")
       .populate("exam", "title")
       .sort({ updatedAt: -1 });
 
     const response = attempts.map(attempt => ({
-      studentName: attempt.student.name,
-      rollNo: attempt.student.rollNo,
-      class: `${attempt.student.year}-${attempt.student.branch}-${attempt.student.section}`,
-      examTitle: attempt.exam.title,
-      violationsCount: attempt.violations.length,
-      submissionType: attempt.status
+      studentName: attempt.student?.name,
+      rollNo: attempt.student?.rollNo,
+      class: `${attempt.student?.year}-${attempt.student?.branch}-${attempt.student?.section}`,
+      examTitle: attempt.exam?.title,
+      flag: "AUTO_SUBMITTED"
     }));
 
     res.json(response);
   } catch (err) {
+    console.error(err);
     res.status(500).json({ message: "Failed to fetch flagged students" });
   }
 };
+
 
 // @desc    Get completed exams and their attempts
 // @route   GET /api/faculty/completed-exams
 // @access  Faculty
 exports.getCompletedExams = async (req, res) => {
   try {
-    // Fetch all attempts that are finished
-    const attempts = await ExamAttempt.find({
-      status: { $in: ["SUBMITTED", "AUTO_SUBMITTED"] }
+    const exams = await Exam.find({
+      status: "COMPLETED",
+      createdBy: req.user.id
     })
-      .populate("exam", "title")
-      .populate("student", "name rollNo")
-      .sort({ updatedAt: -1 });
+      .sort({ endTime: -1 })
+      .select("title year branch section duration endTime");
 
-    // Group attempts by exam
-    const examMap = {};
-
-    for (const attempt of attempts) {
-      const examId = attempt.exam._id.toString();
-
-      if (!examMap[examId]) {
-        examMap[examId] = {
-          examId,
-          title: attempt.exam.title,
-          attempts: []
-        };
-      }
-
-      examMap[examId].attempts.push({
-        studentName: attempt.student.name,
-        rollNo: attempt.student.rollNo,
-        score: attempt.score,
-        status: attempt.status,
-        durationTaken:
-          attempt.startTime && attempt.endTime
-            ? Math.round(
-                (attempt.endTime - attempt.startTime) / 60000
-              ) + " min"
-            : "-"
-      });
-    }
-
-    res.json(Object.values(examMap));
+    res.json(exams);
   } catch (err) {
-    res.status(500).json({ message: "Failed to fetch completed exams" });
+    res.status(500).json({ message: "Failed to load completed exams" });
   }
 };
 
+// @desc    Get exam attempts for a specific exam
+// @route   GET /api/faculty/exams/:examId/attempts
+// @access  Faculty
+exports.getExamAttempts = async (req, res) => {
+  try {
+    const attempts = await ExamAttempt.find({ exam: req.params.examId })
+      .populate("student", "name rollNo")
+      .select("score timeTaken autoSubmitted");
+
+    res.json(attempts);
+  } catch (err) {
+    res.status(500).json({ message: "Failed to load attempts" });
+  }
+};
+
+// @desc    Download exam questions as text file
+// @route   GET /api/faculty/exams/:examId/questions/download
+// @access  Faculty
+exports.downloadExamQuestions = async (req, res) => {
+  try {
+    const exam = await Exam.findById(req.params.examId)
+      .populate("questions");
+
+    if (!exam) return res.status(404).json({ message: "Exam not found" });
+
+    let content = `Exam: ${exam.title}\n\n`;
+
+    exam.questions.forEach((q, i) => {
+      content += `Q${i + 1}: ${q.questionText}\n`;
+      q.options.forEach((opt, idx) => {
+        content += `  ${String.fromCharCode(65 + idx)}. ${opt}\n`;
+      });
+      content += `Answer: ${q.correctAnswer}\n\n`;
+    });
+
+    res.setHeader("Content-Type", "text/plain");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${exam.title}_questions.txt"`
+    );
+    res.send(content);
+  } catch (err) {
+    res.status(500).json({ message: "Failed to download questions" });
+  }
+};
+
+// @desc    Download exam attempts as CSV
+// @route   GET /api/faculty/exams/:examId/attempts/download
+// @access  Faculty
+exports.downloadAttemptsCSV = async (req, res) => {
+  try {
+    const attempts = await ExamAttempt.find({ exam: req.params.examId })
+      .populate("student", "name rollNo");
+
+    let csv = "Name,Roll No,Score,Time Taken,Auto Submitted\n";
+
+    attempts.forEach(a => {
+      csv += `${a.student.name},${a.student.rollNo},${a.score},${a.timeTaken},${a.autoSubmitted}\n`;
+    });
+
+    res.setHeader("Content-Type", "text/csv");
+    res.setHeader(
+      "Content-Disposition",
+      "attachment; filename=attempts.csv"
+    );
+    res.send(csv);
+  } catch (err) {
+    res.status(500).json({ message: "Failed to download CSV" });
+  }
+};
+
+
+// @desc    Get live exams created by faculty
+// @route   GET /api/faculty/live-exams
+// @access  Faculty
 exports.getLiveExams = async (req, res) => {
   try {
-    const exams = await Exam.find({ status: "LIVE", createdBy: req.user.id })
-      .populate("questions")
-      .sort({ createdAt: -1 });
+    const { year, branch, section } = req.query;
+
+    const filter = {
+      status: "LIVE",
+      createdBy: req.user.id
+    };
+
+    if (year) filter.year = year;
+    if (branch) filter.branch = branch;
+    if (section) filter.section = section;
+
+    const exams = await Exam.find(filter)
+      .sort({ createdAt: -1 })
+      .select("title year branch section duration createdAt");
+
     res.json(exams);
-  } catch (err) {
-    res.status(500).json({ message: "Failed to fetch live exams" });
+  } catch (error) {
+    console.error("GET LIVE EXAMS ERROR:", error);
+    res.status(500).json({ message: "Failed to load live exams" });
+  }
+};
+
+
+// @desc    End a live exam
+// @route   PUT /api/faculty/exams/:examId/end
+// @access  Faculty
+exports.endExam = async (req, res) => {
+  try {
+    const { examId } = req.params;
+
+    const exam = await Exam.findById(examId);
+
+    if (!exam) {
+      return res.status(404).json({ message: "Exam not found" });
+    }
+
+    if (exam.createdBy.toString() !== req.user.id) {
+      return res.status(403).json({ message: "Not authorized" });
+    }
+
+    if (exam.status !== "LIVE") {
+      return res.status(400).json({ message: "Exam is not live" });
+    }
+
+    exam.status = "COMPLETED";
+    exam.endTime = new Date();
+
+    await exam.save();
+
+    res.json({ message: "Exam ended successfully" });
+  } catch (error) {
+    console.error("END EXAM ERROR:", error);
+    res.status(500).json({ message: "Failed to end exam" });
+  }
+};
+
+
+// @desc Get students by class
+// @route GET /api/faculty/students
+// @access Faculty
+exports.getStudentsByClass = async (req, res) => {
+  try {
+    const { year, branch, section } = req.query;
+
+    if (!year || !branch || !section) {
+      return res.status(400).json({ message: "Year, branch and section required" });
+    }
+
+    const students = await User.find({
+      role: "student",
+      year,
+      branch,
+      section
+    }).select("name rollNo year branch section");
+
+    res.json(students);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Failed to fetch students" });
+  }
+};
+
+
+// @desc Get student analysis
+// @route GET /api/faculty/student-analysis/:studentId
+// @access Faculty
+exports.getStudentAnalysis = async (req, res) => {
+  try {
+    const { year, branch, section } = req.query;
+
+    if (!year || !branch || !section) {
+      return res.status(400).json({ message: "Year, branch and section are required" });
+    }
+
+    // 1️⃣ Get students of selected class
+    const students = await User.find({
+      role: "student",
+      year,
+      branch,
+      section
+    }).select("name rollNo year branch section");
+
+    if (students.length === 0) {
+      return res.json([]);
+    }
+
+    const studentIds = students.map(s => s._id);
+
+    // 2️⃣ Get all exam attempts of these students
+    const attempts = await ExamAttempt.find({
+      student: { $in: studentIds }
+    });
+
+    // 3️⃣ Build analysis per student
+    const analysis = students.map(student => {
+      const studentAttempts = attempts.filter(
+        a => a.student.toString() === student._id.toString()
+      );
+
+      const totalAttempts = studentAttempts.length;
+
+      const autoSubmittedCount = studentAttempts.filter(
+        a => a.status === "AUTO_SUBMITTED"
+      ).length;
+
+      // const avgScore =
+      //   totalAttempts === 0
+      //     ? 0
+      //     : Math.round(
+      //         studentAttempts.reduce((sum, a) => sum + (a.score || 0), 0) /
+      //         totalAttempts
+      //       );
+      const scoredAttempts = studentAttempts.filter(
+        a => typeof a.score === "number"
+      );
+
+      const avgScore =
+        scoredAttempts.length === 0
+          ? 0
+          : Math.round(
+              scoredAttempts.reduce((sum, a) => sum + a.score, 0) /
+                scoredAttempts.length
+            );
+
+      // 4️⃣ Simple rule-based analysis
+      let riskLevel = "Perfect";
+      if (autoSubmittedCount >= 2) riskLevel = "High Risk";
+      else if (autoSubmittedCount === 1) riskLevel = "Average";
+
+      return {
+        studentId: student._id,
+        name: student.name,
+        rollNo: student.rollNo,
+        class: `${student.year}-${student.branch}-${student.section}`,
+        totalAttempts,
+        autoSubmittedCount,
+        avgScore,
+        riskLevel
+      };
+    });
+
+    res.json(analysis);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Student analysis failed" });
   }
 };

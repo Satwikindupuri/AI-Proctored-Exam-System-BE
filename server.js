@@ -1,9 +1,11 @@
 const studentRoutes = require("./routes/student.routes");
 const facultyRoutes = require("./routes/faculty.routes");
 
+require("dotenv").config();
+
 const express = require("express");
 const cors = require("cors");
-require("dotenv").config();
+
 
 const connectDB = require("./config/db"); // ← this line MUST exist
 
