@@ -3,7 +3,7 @@ const router = express.Router();
 
 const protect = require("../middleware/auth.middleware");
 const roleCheck = require("../middleware/role.middleware");
-const { getLiveExams, getExamDetails, startExam, submitExam } = require("../controllers/student.controller");
+const { getLiveExams, getExamDetails, startExam, submitExam, logAIViolation, logViolation } = require("../controllers/student.controller");
 
 // Test route (student only)
 router.get("/dashboard", protect, roleCheck("student"), (req, res) => {
@@ -39,6 +39,20 @@ router.post(
   protect,
   roleCheck("student"),
   submitExam
+);
+
+router.post(
+  "/exams/:examId/ai-violation",
+  protect,
+  roleCheck("student"),
+  logAIViolation
+);
+
+router.post(
+  "/exams/:examId/violation",
+  protect,
+  // roleCheck("student"),
+  logViolation
 );
 
 module.exports = router;

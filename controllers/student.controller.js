@@ -171,28 +171,69 @@ exports.submitExam = async (req, res) => {
 // @desc    Log violation
 // @route   POST /api/student/exams/:examId/violation
 exports.logViolation = async (req, res) => {
+  try {
+    const { examId } = req.params;
+    const { reason, count } = req.body;
+
+    console.log("VIOLATION LOGGED:",
+      {
+        student: req.user.id,
+        examId,
+        reason,
+        count,
+        timestamp: new Date()
+      });
+      res.status(200).json({ success: true });
+    } catch (error) {
+      console.error("Violation log error:", err);
+      res.status(500).json({ success: false, message: "Failed to log violation" });
+    }
+  };
+        
+// @desc    Log AI violation
+// @route   POST /api/student/exams/:examId/ai-violation
+exports.logAIViolation = async (req, res) => {
   const { examId } = req.params;
-  const { reason } = req.body;
+  const { studentId, type, facesDetected } = req.body;
 
-  const attempt = await ExamAttempt.findOne({
-    exam: examId,
-    student: req.user.id,
-    status: "STARTED",
-  });
+  await ExamAttempt.updateOne(
+    { exam: examId, student: studentId },
+    {
+      $push: {
+        violations: {
+          reason: type,
+          time: new Date(),
+        },
+      },
+    }
+  );
 
-  if (!attempt) return res.sendStatus(200);
-
-  attempt.violations.push({
-    reason,
-    time: new Date(),
-  });
-
-  await attempt.save();
-  res.sendStatus(200);
+  res.json({ message: "AI violation logged" });
 };
 
 // @desc    Upload recording
 // @route   POST /api/student/exams/:examId/recording
 exports.uploadRecording = async (req, res) => {
   res.json({ message: "Recording uploaded successfully", file: req.file });
+};
+
+// ================= AI PROCTORING VIOLATION =================
+// @route   POST /api/student/exams/:examId/ai-violation
+// @access  Student
+exports.logAIViolation = async (req, res) => {
+  const { studentId, type, detectedFaces } = req.body;
+
+  await ExamAttempt.findOneAndUpdate(
+    { exam: req.params.examId, student: studentId },
+    {
+      $push: {
+        violations: {
+          reason: type,
+          time: new Date()
+        }
+      }
+    }
+  );
+
+  res.json({ message: "AI violation logged" });
 };
