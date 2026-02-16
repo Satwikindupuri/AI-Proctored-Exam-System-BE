@@ -4,6 +4,7 @@ const router = express.Router();
 const protect = require("../middleware/auth.middleware");
 const roleCheck = require("../middleware/role.middleware");
 const { getLiveExams, getExamDetails, startExam, submitExam, logAIViolation, logViolation } = require("../controllers/student.controller");
+const { runCode } = require("../utils/judge0");
 
 // Test route (student only)
 router.get("/dashboard", protect, roleCheck("student"), (req, res) => {
@@ -53,6 +54,16 @@ router.post(
   protect,
   // roleCheck("student"),
   logViolation
+);
+
+
+//CODING 
+
+router.post(
+  "/exams/:examId/run",
+  protect,
+  roleCheck("student"),
+  runCodeController
 );
 
 module.exports = router;

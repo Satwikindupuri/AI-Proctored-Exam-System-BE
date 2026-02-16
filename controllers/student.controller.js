@@ -237,3 +237,34 @@ exports.logAIViolation = async (req, res) => {
 
   res.json({ message: "AI violation logged" });
 };
+
+
+
+//CODING MODULE
+
+const { runCode } = require("…/utils/judge0");
+
+exports.runCodeController = async (req, res) => {
+try {
+const { code, language, sampleInput } = req.body;
+
+if (!code || !language) {
+  return res.status(400).json({ message: "Code and language required" });
+}
+
+const result = await runCode({
+  code,
+  language,
+  input: sampleInput || ""
+});
+
+res.json({
+  stdout: result.stdout,
+  stderr: result.stderr,
+  compile_output: result.compile_output,
+  status: result.status.description
+});
+} catch (error) {
+res.status(500).json({ message: "Code execution failed" });
+}
+};

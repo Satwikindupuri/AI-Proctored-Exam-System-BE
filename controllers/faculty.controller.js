@@ -2,11 +2,11 @@ const Question = require("../models/Question");
 const Exam = require("../models/Exam");
 const ExamAttempt = require("../models/ExamAttempt");
 const User = require("../models/User");
-const OpenAI = require("openai");
+// Use Gemini (Google Generative AI)
+const { GoogleGenerativeAI } = require("@google/generative-ai");
 
-// const openai = new OpenAI({
-//   apiKey: process.env.OPENAI_API_KEY,
-// });
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
 // @desc    Create new exam (Faculty)
 // @route   POST /api/faculty/exams
@@ -112,16 +112,108 @@ exports.addManualQuestion = async (req, res) => {
   }
 };
 
+/*
+// @desc Generate AI questions (Gemini)
+// @route POST /api/faculty/exams/:examId/questions/ai-generate
+// @access Faculty
+exports.generateAIQuestions = async (req, res) => {
+try {
+const { syllabus, numberOfQuestions, difficulty } = req.body;
+
+if (!syllabus || !numberOfQuestions || !difficulty) {
+  return res.status(400).json({
+    message: "Syllabus, numberOfQuestions and difficulty are required"
+  });
+}
+
+const model = genAI.getGenerativeModel({
+  model: "gemini-2.5-flash"
+});
+
+const prompt = `
+You are an exam question generator.
+
+Generate ${numberOfQuestions} multiple choice questions.
+
+Difficulty level: 
+d
+i
+f
+f
+i
+c
+u
+l
+t
+y
+S
+y
+l
+l
+a
+b
+u
+s
+:
+difficultySyllabus:{syllabus}
+
+Rules:
+
+Each question must have exactly 4 options.
+Only one correct answer.
+Avoid explanations.
+Output STRICTLY valid JSON array.
+Format:
+
+[
+{
+"questionText": "Question here?",
+"options": ["Option A", "Option B", "Option C", "Option D"],
+"correctAnswer": "Option A"
+}
+]
+`;
+
+const result = await model.generateContent(prompt);
+const response = await result.response;
+const text = response.text();
+
+// Extract only JSON safely
+const jsonStart = text.indexOf("[");
+const jsonEnd = text.lastIndexOf("]") + 1;
+
+if (jsonStart === -1 || jsonEnd === -1) {
+  throw new Error("Invalid AI response format");
+}
+
+const jsonString = text.substring(jsonStart, jsonEnd);
+const questions = JSON.parse(jsonString);
+
+res.json({
+  message: "Gemini AI Questions Generated Successfully",
+  questions
+});
+} catch (error) {
+console.error("GEMINI AI ERROR:", error);
+res.status(500).json({
+message: "AI generation failed",
+error: error.message
+});
+}
+};*/
+
+// OPEN-ai
 // @desc    Generate AI questions (draft)
 // @route   POST /api/faculty/exams/:examId/questions/ai-generate
 // @access  Faculty
 exports.generateAIQuestions = async (req, res) => {
   try {
     const OpenAI = require("openai");
+    const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-    const client = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY
-    });
+    if (!process.env.OPENAI_API_KEY) {
+      return res.status(500).json({ message: "OPENAI_API_KEY not configured" });
+    }
 
     const { syllabus, numberOfQuestions, difficulty = "MEDIUM" } = req.body;
     const { examId } = req.params;
