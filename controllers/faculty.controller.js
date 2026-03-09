@@ -2,6 +2,8 @@ const Question = require("../models/Question");
 const Exam = require("../models/Exam");
 const ExamAttempt = require("../models/ExamAttempt");
 const User = require("../models/User");
+const CodingQuestion = require("../models/CodingQuestion");
+
 // Use Gemini (Google Generative AI)
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 
@@ -492,27 +494,29 @@ exports.publishExam = async (req, res) => {
       return res.status(404).json({ message: "Exam not found" });
     }
 
-    if (exam.createdBy.toString() !== req.user.id) {
-      return res.status(403).json({ message: "Not authorized" });
+    console.log("Exam Type:", exam.examType);
+    console.log("MCQ Count:", exam.questions.length);
+    console.log("Coding Count:", exam.codingQuestions.length);
+
+    if (exam.examType === "MCQ" && exam.questions.length === 0) {
+      return res.status(400).json({
+        message: "Add at least one MCQ before publishing",
+      });
     }
 
-    if (exam.questions.length === 0) {
-      return res
-        .status(400)
-        .json({ message: "Add at least one question before publishing" });
+    if (exam.examType === "CODING" && exam.codingQuestions.length === 0) {
+      return res.status(400).json({
+        message: "Add at least one coding question before publishing",
+      });
     }
 
     exam.status = "LIVE";
-    exam.startTime = new Date();
-
     await exam.save();
 
-    res.json({
-      message: "Exam published successfully",
-      exam,
-    });
-  } catch (error) {
-    res.status(500).json({ message: "Failed to publish exam" });
+    res.json({ message: "Exam published successfully" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
   }
 };
 
@@ -802,4 +806,191 @@ exports.getStudentAnalysis = async (req, res) => {
     console.error(error);
     res.status(500).json({ message: "Student analysis failed" });
   }
+};
+
+
+//coding module
+// @desc    Create coding question
+// @route   POST /api/faculty/coding-question
+// @access  Faculty
+// const CodingQuestion = require("…/models/CodingQuestion");
+// const Exam = require("…/models/Exam");
+
+exports.createCodingQuestion = async (req, res) => {
+try {
+const {
+title,
+description,
+difficulty,
+functionName,
+parameters,
+returnType,
+marks,
+sampleTestCases,
+hiddenTestCases,
+} = req.body;
+
+if (!title || !description || !functionName || !marks) {
+  return res.status(400).json({ message: "Required fields missing" });
+}
+
+// Parse stringified JSON fields
+let parsedParameters = parameters;
+let parsedSampleTestCases = sampleTestCases;
+let parsedHiddenTestCases = hiddenTestCases;
+
+const parseJSON = (jsonString) => {
+  if (typeof jsonString === "string") {
+    // Convert single quotes to double quotes for valid JSON
+    const validJSON = jsonString.replace(/'/g, '"');
+    return JSON.parse(validJSON);
+  }
+  return jsonString;
+};
+
+try {
+  parsedParameters = parseJSON(parameters);
+  parsedSampleTestCases = parseJSON(sampleTestCases);
+  parsedHiddenTestCases = parseJSON(hiddenTestCases);
+} catch (parseError) {
+  console.error("JSON PARSE ERROR:", parseError);
+  return res.status(400).json({
+    message: "Invalid JSON in parameters, sampleTestCases, or hiddenTestCases",
+    error: parseError.message,
+  });
+}
+
+const codingQuestion = await CodingQuestion.create({
+  title,
+  description,
+  difficulty,
+  functionName,
+  parameters: parsedParameters,
+  returnType,
+  marks,
+  sampleTestCases: parsedSampleTestCases,
+  hiddenTestCases: parsedHiddenTestCases,
+  createdBy: req.user.id,
+});
+
+res.status(201).json(codingQuestion);
+} catch (error) {
+console.error("CREATE CODING ERROR:", error);
+res.status(500).json({
+  message: "Failed to create coding question",
+  error: error.message,
+});
+}
+};
+
+// @desc    Add coding question to exam
+// @route   POST /api/faculty/exams/:examId/questions/coding
+// @access  Faculty
+
+exports.addCodingQuestionToExam = async (req, res) => {
+try {
+const { examId } = req.params;
+const { questionId, codingQuestionId } = req.body;
+const actualQuestionId = questionId || codingQuestionId;
+
+console.log("Received questionId:", actualQuestionId);
+
+if (!actualQuestionId) {
+  return res.status(400).json({ message: "questionId or codingQuestionId is required" });
+}
+
+const exam = await Exam.findById(examId);
+
+if (!exam) return res.status(404).json({ message: "Exam not found" });
+
+if (exam.examType !== "CODING") {
+  return res.status(400).json({ message: "Not a coding exam" });
+}
+
+// Verify the coding question exists
+const codingQuestion = await CodingQuestion.findById(actualQuestionId);
+if (!codingQuestion) {
+  return res.status(404).json({ message: "Coding question not found" });
+}
+
+exam.codingQuestions.push(actualQuestionId);
+await exam.save();
+
+res.json({ message: "Coding question added", exam });
+} catch (err) {
+console.error(err);
+res.status(500).json({ message: "Server error" });
+}
+};
+
+
+// @desc    Get all exams created by faculty
+// @route   GET /api/faculty/exams
+// @access  Faculty
+exports.getAllExams = async (req, res) => {
+try {
+const exams = await Exam.find({ createdBy: req.user._id })
+.populate("questions")
+.populate("codingQuestions");
+
+res.json(exams);
+} catch (error) {
+console.error(error);
+res.status(500).json({ message: "Error fetching exams" });
+}
+};
+
+// @desc    Create coding question and attach to exam
+// @route   POST /api/faculty/exams/:examId/questions/coding-create
+// @access  Faculty
+exports.createAndAttachCodingQuestion = async (req, res) => {
+try {
+const { examId } = req.params;
+
+const {
+  title,
+  description,
+  difficulty,
+  marks,
+  functionName,
+  parameters,
+  returnType,
+  sampleTestCases,
+  hiddenTestCases,
+} = req.body;
+
+const exam = await Exam.findById(examId);
+
+if (!exam) {
+  return res.status(404).json({ message: "Exam not found" });
+}
+
+if (exam.examType !== "CODING") {
+  return res.status(400).json({ message: "Not a coding exam" });
+}
+
+const question = await CodingQuestion.create({
+  title,
+  description,
+  difficulty,
+  marks,
+  functionName,
+  parameters,
+  returnType,
+  sampleTestCases,
+  hiddenTestCases,
+  createdBy: req.user.id,
+});
+
+exam.codingQuestions.push(question._id);
+await exam.save();
+
+res.status(201).json({
+  message: "Coding question created and attached",
+  question,
+});
+} catch (error) {
+console.error("CREATE CODING ERROR:", error);
+res.status(500).json({ message: "Failed to create coding question" });
+}
 };

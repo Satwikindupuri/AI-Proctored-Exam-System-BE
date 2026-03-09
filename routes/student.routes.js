@@ -3,8 +3,8 @@ const router = express.Router();
 
 const protect = require("../middleware/auth.middleware");
 const roleCheck = require("../middleware/role.middleware");
-const { getLiveExams, getExamDetails, startExam, submitExam, logAIViolation, logViolation } = require("../controllers/student.controller");
-const { runCode } = require("../utils/judge0");
+const { getLiveExams, getExamDetails, startExam, submitExam, logAIViolation, logViolation, runCodingQuestion, submitCodingQuestion, finalSubmitExam } = require("../controllers/student.controller");
+// const { runCode } = require("../utils/judge0");
 
 // Test route (student only)
 router.get("/dashboard", protect, roleCheck("student"), (req, res) => {
@@ -57,13 +57,29 @@ router.post(
 );
 
 
-//CODING 
+/ ================= CODING MODULE =================/
+
+// Run coding question (sample test cases only)
+router.post(
+"/exams/:examId/coding/:questionId/run",
+protect,
+roleCheck("student"),
+runCodingQuestion
+);
+
+// Submit coding question (hidden test cases evaluation)
+router.post(
+"/exams/:examId/coding/:questionId/submit",
+protect,
+roleCheck("student"),
+submitCodingQuestion
+);
 
 router.post(
-  "/exams/:examId/run",
+  "/exams/:examId/final-submit",
   protect,
   roleCheck("student"),
-  runCodeController
+  finalSubmitExam
 );
 
 module.exports = router;

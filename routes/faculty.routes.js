@@ -3,7 +3,7 @@ const router = express.Router();
 
 const protect = require("../middleware/auth.middleware");
 const roleCheck = require("../middleware/role.middleware");
-const { createExam, addManualQuestion, generateAIQuestions, saveAIQuestions, publishExam, getFlaggedStudents, getLiveExams, updateExamQuestions, endExam, getCompletedExams, getExamAttempts, downloadExamQuestions, downloadAttemptsCSV,getStudentAnalysis, getStudentsByClass } = require("../controllers/faculty.controller");
+const { createExam, addManualQuestion, generateAIQuestions, saveAIQuestions, publishExam, getFlaggedStudents, getLiveExams, updateExamQuestions, endExam, getCompletedExams, getExamAttempts, downloadExamQuestions, downloadAttemptsCSV,getStudentAnalysis, getStudentsByClass, createCodingQuestion, addCodingQuestionToExam, getAllExams, createAndAttachCodingQuestion } = require("../controllers/faculty.controller");
 const Exam = require("../models/Exam");
 
 // Test route (faculty only)
@@ -152,4 +152,38 @@ router.get(
   getStudentsByClass
 );
 
+router.post(
+  "/coding-question",
+  protect,
+  roleCheck("faculty"),
+  createCodingQuestion
+);
+
+router.post(
+  "/coding-questions",
+  protect,
+  roleCheck("faculty"),
+  createCodingQuestion
+);
+
+router.post(
+  "/exams/:examId/add-coding-question",
+  protect,
+  roleCheck("faculty"),
+  addCodingQuestionToExam
+);
+
+router.get(
+  "/exams",
+  protect,
+  roleCheck("faculty"),
+  getAllExams  
+);
+
+router.post(
+  "/exams/:examId/coding-questions",
+  protect,
+  roleCheck("faculty"),
+  createAndAttachCodingQuestion
+);
 module.exports = router;

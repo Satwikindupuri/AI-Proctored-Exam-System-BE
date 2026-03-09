@@ -59,6 +59,13 @@ const examSchema = new mongoose.Schema(
       },
     ],
 
+    codingQuestions: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "CodingQuestion",
+      },
+    ],
+
     startTime: Date,
     endTime: Date,
   },

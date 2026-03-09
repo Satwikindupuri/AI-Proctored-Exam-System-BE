@@ -35,16 +35,48 @@ const examAttemptSchema = new mongoose.Schema(
           type: mongoose.Schema.Types.ObjectId,
           ref: "Question",
         },
-        answer: String,
+        // MCQ: selected option; Coding: submitted source code
+        answer: {
+          type: String,
+          default: "",
+        },
+
+        // Coding evaluation tracking
+        passedTestCases: {
+          type: Number,
+          default: 0,
+        },
+        totalTestCases: {
+          type: Number,
+          default: 0,
+        },
+        score: {
+          type: Number,
+          default: 0,
+        },
+      },
+    ],
+
+    codingAnswers: [
+      {
+        question: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "CodingQuestion",
+        },
+        code: String,
+        language: String,
+        passedCases: Number,
+        totalCases: Number,
+        marksAwarded: Number,
       },
     ],
 
     violations: [
-  {
-    reason: String,
-    time: Date
-  }
-],
+      {
+        reason: String,
+        time: Date,
+      },
+    ],
 
 
     score: {
