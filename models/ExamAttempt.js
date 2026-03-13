@@ -78,6 +78,23 @@ const examAttemptSchema = new mongoose.Schema(
       },
     ],
 
+    snapshots: [
+      {
+        imageData: {
+          type: String,
+          required: true,
+        },
+        capturedAt: {
+          type: Date,
+          default: Date.now,
+        },
+        reason: {
+          type: String,
+          default: "interval",
+        },
+      },
+    ],
+
 
     score: {
       type: Number,

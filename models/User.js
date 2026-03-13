@@ -1,6 +1,16 @@
 const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
 
+const profileItemSchema = new mongoose.Schema(
+  {
+    title: { type: String, trim: true, default: "" },
+    issuer: { type: String, trim: true, default: "" },
+    date: { type: String, trim: true, default: "" },
+    link: { type: String, trim: true, default: "" },
+  },
+  { _id: false }
+);
+
 const userSchema = new mongoose.Schema(
   {
     name: {
@@ -33,9 +43,9 @@ const userSchema = new mongoose.Schema(
     section: String,
     phone: String,
 
-    skills: [String],
-    achievements: [String],
-    certificates: [String],
+    skills: [{ type: String, trim: true }],
+    achievements: [profileItemSchema],
+    certificates: [profileItemSchema],
     resumeUrl: String,
   },
   { timestamps: true }

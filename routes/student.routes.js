@@ -3,7 +3,7 @@ const router = express.Router();
 
 const protect = require("../middleware/auth.middleware");
 const roleCheck = require("../middleware/role.middleware");
-const { getLiveExams, getExamDetails, startExam, submitExam, logAIViolation, logViolation, runCodingQuestion, submitCodingQuestion, finalSubmitExam } = require("../controllers/student.controller");
+const { getLiveExams, getStudentResults, getStudentAnalysis, getStudentProfile, updateStudentProfile, getExamDetails, startExam, submitExam, logAIViolation, logViolation, runCodingQuestion, submitCodingQuestion, finalSubmitExam, saveExamSnapshot } = require("../controllers/student.controller");
 // const { runCode } = require("../utils/judge0");
 
 // Test route (student only)
@@ -19,6 +19,34 @@ router.get(
   protect,
   roleCheck("student"),
   getLiveExams
+);
+
+router.get(
+  "/results",
+  protect,
+  roleCheck("student"),
+  getStudentResults
+);
+
+router.get(
+  "/analysis",
+  protect,
+  roleCheck("student"),
+  getStudentAnalysis
+);
+
+router.get(
+  "/profile",
+  protect,
+  roleCheck("student"),
+  getStudentProfile
+);
+
+router.patch(
+  "/profile",
+  protect,
+  roleCheck("student"),
+  updateStudentProfile
 );
 
 router.get(
@@ -54,6 +82,13 @@ router.post(
   protect,
   // roleCheck("student"),
   logViolation
+);
+
+router.post(
+  "/exams/:examId/snapshot",
+  protect,
+  roleCheck("student"),
+  saveExamSnapshot
 );
 
 

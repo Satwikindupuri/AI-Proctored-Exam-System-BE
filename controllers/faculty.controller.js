@@ -568,13 +568,73 @@ exports.getCompletedExams = async (req, res) => {
 // @access  Faculty
 exports.getExamAttempts = async (req, res) => {
   try {
+    const exam = await Exam.findById(req.params.examId).select("createdBy");
+    if (!exam) {
+      return res.status(404).json({ message: "Exam not found" });
+    }
+
+    if (exam.createdBy.toString() !== req.user.id) {
+      return res.status(403).json({ message: "Not authorized" });
+    }
+
     const attempts = await ExamAttempt.find({ exam: req.params.examId })
       .populate("student", "name rollNo")
-      .select("score timeTaken autoSubmitted");
+      .select("score status startTime endTime snapshots");
 
-    res.json(attempts);
+    const response = attempts.map((attempt) => ({
+      _id: attempt._id,
+      student: attempt.student,
+      score: attempt.score,
+      status: attempt.status,
+      startTime: attempt.startTime,
+      endTime: attempt.endTime,
+      snapshotCount: Array.isArray(attempt.snapshots) ? attempt.snapshots.length : 0,
+    }));
+
+    res.json(response);
   } catch (err) {
     res.status(500).json({ message: "Failed to load attempts" });
+  }
+};
+
+// @desc    Get snapshots for a specific attempt
+// @route   GET /api/faculty/exams/:examId/attempts/:attemptId/snapshots
+// @access  Faculty
+exports.getAttemptSnapshots = async (req, res) => {
+  try {
+    const { examId, attemptId } = req.params;
+
+    const exam = await Exam.findById(examId).select("createdBy");
+    if (!exam) {
+      return res.status(404).json({ message: "Exam not found" });
+    }
+
+    if (exam.createdBy.toString() !== req.user.id) {
+      return res.status(403).json({ message: "Not authorized" });
+    }
+
+    const attempt = await ExamAttempt.findOne({ _id: attemptId, exam: examId })
+      .populate("student", "name rollNo")
+      .select("student snapshots status startTime endTime score");
+
+    if (!attempt) {
+      return res.status(404).json({ message: "Attempt not found" });
+    }
+
+    res.json({
+      attemptId: attempt._id,
+      student: attempt.student,
+      status: attempt.status,
+      score: attempt.score,
+      startTime: attempt.startTime,
+      endTime: attempt.endTime,
+      snapshots: (attempt.snapshots || []).sort(
+        (a, b) => new Date(a.capturedAt).getTime() - new Date(b.capturedAt).getTime()
+      ),
+    });
+  } catch (error) {
+    console.error("GET SNAPSHOTS ERROR:", error);
+    res.status(500).json({ message: "Failed to load snapshots" });
   }
 };
 

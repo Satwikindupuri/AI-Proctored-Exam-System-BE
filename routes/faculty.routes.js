@@ -3,7 +3,7 @@ const router = express.Router();
 
 const protect = require("../middleware/auth.middleware");
 const roleCheck = require("../middleware/role.middleware");
-const { createExam, addManualQuestion, generateAIQuestions, saveAIQuestions, publishExam, getFlaggedStudents, getLiveExams, updateExamQuestions, endExam, getCompletedExams, getExamAttempts, downloadExamQuestions, downloadAttemptsCSV,getStudentAnalysis, getStudentsByClass, createCodingQuestion, addCodingQuestionToExam, getAllExams, createAndAttachCodingQuestion } = require("../controllers/faculty.controller");
+const { createExam, addManualQuestion, generateAIQuestions, saveAIQuestions, publishExam, getFlaggedStudents, getLiveExams, updateExamQuestions, endExam, getCompletedExams, getExamAttempts, getAttemptSnapshots, downloadExamQuestions, downloadAttemptsCSV,getStudentAnalysis, getStudentsByClass, createCodingQuestion, addCodingQuestionToExam, getAllExams, createAndAttachCodingQuestion } = require("../controllers/faculty.controller");
 const Exam = require("../models/Exam");
 
 // Test route (faculty only)
@@ -119,6 +119,13 @@ router.get(
   protect,
   roleCheck("faculty"),
   getExamAttempts
+);
+
+router.get(
+  "/exams/:examId/attempts/:attemptId/snapshots",
+  protect,
+  roleCheck("faculty"),
+  getAttemptSnapshots
 );
 
 // Download exam questions
