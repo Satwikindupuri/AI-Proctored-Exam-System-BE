@@ -91,7 +91,10 @@ exports.getLiveExams = async (req, res) => {
       status: "LIVE",
       year: student.year,
       branch: student.branch,
-      section: student.section,
+      $or: [
+        { section: student.section },
+        { targetSections: student.section },
+      ],
     }).select("title examType duration startTime");
 
     const examIds = exams.map((exam) => exam._id);

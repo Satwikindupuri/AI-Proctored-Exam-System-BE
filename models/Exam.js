@@ -38,6 +38,11 @@ const examSchema = new mongoose.Schema(
       type: String,
     },
 
+    targetSections: {
+      type: [String],
+      default: [],
+    },
+
     // Faculty who created the exam
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,

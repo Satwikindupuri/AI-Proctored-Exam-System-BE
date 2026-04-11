@@ -23,11 +23,38 @@ exports.createExam = async (req, res) => {
       year,
       branch,
       section,
+      targetSections,
     } = req.body;
 
     if (!title || !examType || !duration || !year || !branch) {
       return res.status(400).json({ message: "Required fields missing" });
     }
+
+    const parsedTargetSections = Array.isArray(targetSections)
+      ? targetSections
+          .map((item) => String(item || "").trim())
+          .filter(Boolean)
+      : typeof targetSections === "string"
+        ? targetSections
+            .split(",")
+            .map((item) => item.trim())
+            .filter(Boolean)
+        : [];
+
+    const parsedSectionsFromLegacyField =
+      typeof section === "string" && section.trim()
+        ? section
+            .split(",")
+            .map((item) => item.trim())
+            .filter(Boolean)
+        : [];
+
+    const normalizedTargetSections = [...new Set([
+      ...parsedTargetSections,
+      ...parsedSectionsFromLegacyField,
+    ])];
+
+    const resolvedSection = normalizedTargetSections[0] || "";
 
     const exam = await Exam.create({
       title,
@@ -36,7 +63,8 @@ exports.createExam = async (req, res) => {
       instructions,
       year,
       branch,
-      section,
+      section: resolvedSection,
+      targetSections: normalizedTargetSections,
       createdBy: req.user.id,
     });
 
@@ -555,7 +583,7 @@ exports.getCompletedExams = async (req, res) => {
       createdBy: req.user.id
     })
       .sort({ endTime: -1 })
-      .select("title year branch section duration endTime");
+      .select("title year branch section targetSections duration endTime");
 
     res.json(exams);
   } catch (err) {
@@ -709,11 +737,16 @@ exports.getLiveExams = async (req, res) => {
 
     if (year) filter.year = year;
     if (branch) filter.branch = branch;
-    if (section) filter.section = section;
+    if (section) {
+      filter.$or = [
+        { section },
+        { targetSections: section },
+      ];
+    }
 
     const exams = await Exam.find(filter)
       .sort({ createdAt: -1 })
-      .select("title year branch section duration createdAt");
+      .select("title year branch section targetSections duration createdAt");
 
     res.json(exams);
   } catch (error) {

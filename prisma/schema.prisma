@@ -1,0 +1,238 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("MONGO_URI")
+}
+
+enum UserRole {
+  STUDENT @map("student")
+  FACULTY @map("faculty")
+}
+
+enum ExamType {
+  MCQ
+  CODING
+}
+
+enum ExamStatus {
+  DRAFT
+  LIVE
+  COMPLETED
+}
+
+enum AttemptStatus {
+  STARTED
+  SUBMITTED
+  AUTO_SUBMITTED
+}
+
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+enum QuestionSource {
+  MANUAL
+  AI
+}
+
+model User {
+  id           String        @id @default(auto()) @map("_id") @db.ObjectId
+  name         String
+  email        String        @unique
+  password     String
+  role         UserRole
+  rollNo       String?
+  year         String?
+  branch       String?
+  section      String?
+  phone        String?
+  skills       String[]
+  achievements ProfileItem[]
+  certificates ProfileItem[]
+  resumeUrl    String?
+
+  createdExams            Exam[]            @relation("UserCreatedExams")
+  examAttempts            ExamAttempt[]     @relation("UserExamAttempts")
+  createdQuestions        Question[]        @relation("UserCreatedQuestions")
+  createdCodingQuestions  CodingQuestion[]  @relation("UserCreatedCodingQuestions")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("users")
+  @@index([role])
+  @@index([year, branch, section])
+}
+
+model Exam {
+  id             String   @id @default(auto()) @map("_id") @db.ObjectId
+  title          String
+  examType       ExamType
+  duration       Int
+  instructions   String?
+  year           String
+  branch         String
+  section        String?
+  targetSections String[]
+
+  createdById String @db.ObjectId
+  createdBy   User   @relation("UserCreatedExams", fields: [createdById], references: [id])
+
+  status    ExamStatus @default(DRAFT)
+  startTime DateTime?
+  endTime   DateTime?
+
+  questions      Question[]
+  codingQuestionIds String[]         @db.ObjectId
+  codingQuestions   CodingQuestion[] @relation(fields: [codingQuestionIds], references: [id])
+  attempts       ExamAttempt[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("exams")
+  @@index([createdById])
+  @@index([status])
+  @@index([year, branch, section])
+  @@index([startTime])
+}
+
+model Question {
+  id           String        @id @default(auto()) @map("_id") @db.ObjectId
+  examId       String        @db.ObjectId
+  exam         Exam          @relation(fields: [examId], references: [id])
+  questionType ExamType
+  questionText String
+
+  options       String[]
+  correctAnswer String?
+
+  sampleInput  String?
+  sampleOutput String?
+
+  hiddenTestCases HiddenTestCase[]
+
+  marks      Int            @default(10)
+  difficulty Difficulty     @default(MEDIUM)
+  source     QuestionSource @default(MANUAL)
+
+  createdById String? @db.ObjectId
+  createdBy   User?   @relation("UserCreatedQuestions", fields: [createdById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("questions")
+  @@index([examId])
+  @@index([questionType])
+  @@index([createdById])
+}
+
+model CodingQuestion {
+  id           String      @id @default(auto()) @map("_id") @db.ObjectId
+  title        String
+  description  String
+  difficulty   Difficulty  @default(MEDIUM)
+  functionName String
+  parameters   Parameter[]
+  returnType   String?
+  marks        Int
+
+  sampleTestCases TestCase[]
+  hiddenTestCases TestCase[]
+
+  createdById String @db.ObjectId
+  createdBy   User   @relation("UserCreatedCodingQuestions", fields: [createdById], references: [id])
+
+  examIds String[] @db.ObjectId
+  exams   Exam[]   @relation(fields: [examIds], references: [id])
+
+  @@map("codingquestions")
+  @@index([createdById])
+  @@index([difficulty])
+}
+
+model ExamAttempt {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+
+  examId String @db.ObjectId
+  exam   Exam   @relation(fields: [examId], references: [id])
+
+  studentId String @db.ObjectId
+  student   User   @relation("UserExamAttempts", fields: [studentId], references: [id])
+
+  startTime DateTime
+  endTime   DateTime?
+  status    AttemptStatus @default(STARTED)
+
+  answers       AttemptAnswer[]
+  codingAnswers CodingAnswer[]
+  violations    Violation[]
+  snapshots     Snapshot[]
+
+  score Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("examattempts")
+  @@index([examId])
+  @@index([studentId])
+  @@index([status])
+  @@index([startTime])
+}
+
+type ProfileItem {
+  title  String?
+  issuer String?
+  date   String?
+  link   String?
+}
+
+type Parameter {
+  name String
+  type String
+}
+
+type TestCase {
+  input          String?
+  expectedOutput String?
+}
+
+type HiddenTestCase {
+  input          String?
+  expectedOutput String?
+}
+
+type AttemptAnswer {
+  questionId      String? @db.ObjectId
+  answer          String  @default("")
+  passedTestCases Int     @default(0)
+  totalTestCases  Int     @default(0)
+  score           Int     @default(0)
+}
+
+type CodingAnswer {
+  questionId  String? @db.ObjectId
+  code        String?
+  language    String?
+  passedCases Int?
+  totalCases  Int?
+  marksAwarded Int?
+}
+
+type Violation {
+  reason String?
+  time   DateTime?
+}
+
+type Snapshot {
+  imageData  String
+  capturedAt DateTime @default(now())
+  reason     String   @default("interval")
+}
