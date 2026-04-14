@@ -33,6 +33,13 @@ build/
 # Uploaded files (do not commit large user uploads)
 uploads/
 
+# Documentation
+documentation/
+docs/
+
+# Prisma folder (ignored as requested)
+prisma/
+
 # Databases
 *.sqlite
 *.sqlite3
