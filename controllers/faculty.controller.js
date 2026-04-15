@@ -238,13 +238,6 @@ error: error.message
 // @access  Faculty
 exports.generateAIQuestions = async (req, res) => {
   try {
-    const OpenAI = require("openai");
-    const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
-    if (!process.env.OPENAI_API_KEY) {
-      return res.status(500).json({ message: "OPENAI_API_KEY not configured" });
-    }
-
     const { syllabus, numberOfQuestions, difficulty = "MEDIUM" } = req.body;
     const { examId } = req.params;
 
@@ -291,33 +284,98 @@ JSON FORMAT (ARRAY ONLY):
 ]
 `;
 
-    const response = await client.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [{ role: "user", content: prompt }],
-      temperature: 0.6
-    });
+    const parseQuestionsFromText = (raw) => {
+      const text = String(raw || "").trim();
+      const jsonStart = text.indexOf("[");
+      const jsonEnd = text.lastIndexOf("]");
 
-    let aiQuestions;
-
-    try {
-      const raw = response.choices[0].message.content.trim();
-
-      // Extract JSON array if extra text exists
-      const jsonStart = raw.indexOf("[");
-      const jsonEnd = raw.lastIndexOf("]");
-
-      if (jsonStart === -1 || jsonEnd === -1) {
+      if (jsonStart === -1 || jsonEnd === -1 || jsonEnd < jsonStart) {
         throw new Error("AI did not return valid JSON");
       }
 
-      const jsonString = raw.substring(jsonStart, jsonEnd + 1);
-      aiQuestions = JSON.parse(jsonString);
+      const parsed = JSON.parse(text.substring(jsonStart, jsonEnd + 1));
+      if (!Array.isArray(parsed) || parsed.length === 0) {
+        throw new Error("AI returned empty questions");
+      }
 
-    } catch (parseError) {
-      console.error("JSON PARSE FAILED:", response.choices[0].message.content);
-      return res.status(500).json({
-        message: "AI returned invalid format. Try regenerating."
+      return parsed;
+    };
+
+    const generateWithOpenAI = async () => {
+      const OpenAI = require("openai");
+      const openAiKey = process.env.OPENAI_API_KEY || process.env.OpenAI_API_KEY;
+
+      if (!openAiKey) {
+        const err = new Error("OPENAI_API_KEY not configured");
+        err.status = 500;
+        err.code = "openai_key_missing";
+        throw err;
+      }
+
+      const client = new OpenAI({ apiKey: openAiKey });
+      const response = await client.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0.6
       });
+
+      return parseQuestionsFromText(response?.choices?.[0]?.message?.content);
+    };
+
+    const generateWithGemini = async () => {
+      if (!process.env.GEMINI_API_KEY) {
+        const err = new Error("GEMINI_API_KEY not configured");
+        err.status = 500;
+        err.code = "gemini_key_missing";
+        throw err;
+      }
+
+      const geminiClient = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+      const candidateModels = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"];
+      let lastError;
+
+      for (const modelName of candidateModels) {
+        try {
+          const geminiModel = geminiClient.getGenerativeModel({ model: modelName });
+          const result = await geminiModel.generateContent(prompt);
+          const text = result?.response?.text?.() || "";
+          return parseQuestionsFromText(text);
+        } catch (err) {
+          lastError = err;
+        }
+      }
+
+      const wrappedError = new Error(lastError?.message || "Gemini generation failed");
+      wrappedError.status = lastError?.status || 500;
+      wrappedError.code = lastError?.code || "gemini_generation_failed";
+      wrappedError.error = lastError?.error;
+      throw wrappedError;
+    };
+
+    let aiQuestions;
+    let provider = "openai";
+
+    try {
+      aiQuestions = await generateWithOpenAI();
+    } catch (openAiError) {
+      const shouldFallbackToGemini =
+        openAiError?.status === 429 ||
+        openAiError?.code === "insufficient_quota" ||
+        openAiError?.code === "openai_key_missing";
+
+      if (!shouldFallbackToGemini) {
+        throw openAiError;
+      }
+
+      console.error("OPENAI FAILED, FALLING BACK TO GEMINI:", {
+        message: openAiError?.message,
+        status: openAiError?.status,
+        code: openAiError?.code,
+        details: openAiError?.error,
+      });
+
+      aiQuestions = await generateWithGemini();
+      provider = "gemini";
     }
 
     const savedQuestions = [];
@@ -341,12 +399,23 @@ JSON FORMAT (ARRAY ONLY):
     await exam.save();
 
     res.json({
-      message: "AI questions generated successfully",
+      message: `AI questions generated successfully via ${provider}`,
+      provider,
       questions: savedQuestions
     });
   } catch (error) {
-    console.error("AI GENERATION ERROR:", error);
-    res.status(500).json({ message: "AI generation failed" });
+    console.error("AI GENERATION ERROR:", {
+      message: error?.message,
+      status: error?.status,
+      code: error?.code,
+      type: error?.type,
+      details: error?.error,
+    });
+
+    res.status(error?.status || 500).json({
+      message: error?.error?.message || error?.message || "AI generation failed",
+      code: error?.code || error?.error?.code || "ai_generation_failed"
+    });
   }
 };
 
