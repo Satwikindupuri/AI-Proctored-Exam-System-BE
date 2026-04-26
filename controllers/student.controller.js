@@ -535,32 +535,37 @@ exports.logViolation = async (req, res) => {
         count,
         timestamp: new Date()
       });
-      res.status(200).json({ success: true });
-    } catch (error) {
-      console.error("Violation log error:", err);
-      res.status(500).json({ success: false, message: "Failed to log violation" });
-    }
-  };
+    res.status(200).json({ success: true });
+  } catch (error) {
+    console.error("Violation log error:", error);
+    res.status(500).json({ success: false, message: "Failed to log violation" });
+  }
+};
         
 // @desc    Log AI violation
 // @route   POST /api/student/exams/:examId/ai-violation
 exports.logAIViolation = async (req, res) => {
-  const { examId } = req.params;
-  const { studentId, type, facesDetected } = req.body;
+  try {
+    const { examId } = req.params;
+    const { studentId, type } = req.body;
 
-  await ExamAttempt.updateOne(
-    { exam: examId, student: studentId },
-    {
-      $push: {
-        violations: {
-          reason: type,
-          time: new Date(),
+    await ExamAttempt.updateOne(
+      { exam: examId, student: studentId },
+      {
+        $push: {
+          violations: {
+            reason: type,
+            time: new Date(),
+          },
         },
-      },
-    }
-  );
+      }
+    );
 
-  res.json({ message: "AI violation logged" });
+    res.json({ message: "AI violation logged" });
+  } catch (error) {
+    console.error("AI violation log error:", error);
+    res.status(500).json({ message: "Failed to log AI violation" });
+  }
 };
 
 // @desc    Upload recording
@@ -568,29 +573,6 @@ exports.logAIViolation = async (req, res) => {
 exports.uploadRecording = async (req, res) => {
   res.json({ message: "Recording uploaded successfully", file: req.file });
 };
-
-// ================= AI PROCTORING VIOLATION =================
-// @route   POST /api/student/exams/:examId/ai-violation
-// @access  Student
-exports.logAIViolation = async (req, res) => {
-  const { studentId, type, detectedFaces } = req.body;
-
-  await ExamAttempt.findOneAndUpdate(
-    { exam: req.params.examId, student: studentId },
-    {
-      $push: {
-        violations: {
-          reason: type,
-          time: new Date()
-        }
-      }
-    }
-  );
-
-  res.json({ message: "AI violation logged" });
-};
-
-
 
 // //CODING MODULE
 
